@@ -27,6 +27,7 @@ c = blade(:, 2);
 beta = blade(:, 3);
 
 % assuming: r is sorted from root to tip
+rhub = r(1);
 rtip = r(end);
 ctip = c(end);
 
@@ -42,7 +43,9 @@ for isec = 1:length(r)
 	lsr = tsr * r(isec) / rtip;
 
 	% tip-loss
-	F = @(phi) max(2/pi * acos(exp(-B/2 * (tsr/lsr - 1) / sin(phi))), eps);
+	Ftip = @(phi) max(2/pi * acos(exp(-B/2 * (tsr/lsr - 1) ./ sin(phi))), eps);
+	Froot = @(phi) max(2/pi * acos(exp(-B/2 * (1 - rhub/r(isec)) ./ sin(phi))), eps);
+	F = @(phi) Ftip(phi).* Froot(phi);
 
 	clf = @(alpha) interp1(polar(:, 1, isec), polar(:, 2, isec), alpha);
 	cdf = @(alpha) interp1(polar(:, 1, isec), polar(:, 3, isec), alpha);

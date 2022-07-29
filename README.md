@@ -13,3 +13,8 @@ An implementation of Glauert's tip-loss factor is provided.
 ## Output
  * `outr`: a struct containing quantities varying along the blade span: these are: radius (r), induction factors (a, ap), local aoa (alpha), forces (cfnorm, cftang, cl, cd)
  * `outp`: a struct containing performance characteristics: these are: thrust (ct), torque (cq), power (cp), root-bending moment (cy)
+
+## Changelog:
+v1.01 (2022/07/29):
+ * implemented root-loss correction via Prandtl
+ * added a function to perform Viterna extrapolation on a minimal foil polar
