@@ -6,7 +6,7 @@ An implementation of Glauert's tip-loss factor is provided.
 
 ## Input
  * `blade`: a Nsec × 3 matrix: [radius(:), chord(:), twist(:)]. Radius and chord are in the same units, twist is in RADIANS
- * `polar`: a Nalpha × 3 × Nsec matrix: each page is [alpha(:), cl(:), cd(:)]. alpha is in RADIANS; the j-th page refers to the j-th section of the blade. The polar MUST BE defined over all values of alpha, ie from -pi to pi
+ * `polar`: struct containing polar.CL and polar.CD (griddedInterpolant's, polar.CL(alpha, r)); must be defined from -pi to pi
  * `tsr`: the tip-speed ratio at which the analysis is carried out
  * `B`: the number of blades
  
