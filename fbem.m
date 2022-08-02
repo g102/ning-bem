@@ -8,9 +8,9 @@ function [outr, outp] = fbem(blade, polar, tsr, B)
 %  Input:
 %   * blade: a Nsec × 3 matrix: [radius(:), chord(:), twist(:)]
 %     radius and chord are in the same units, twist is in RADIANS
-%   * polar: a Nalpha × 3 × Nsec matrix: each page is [alpha(:), cl(:), cd(:)]
-%     alpha is in RADIANS; the j-th page refers to the j-th section of the blade
-%     the polar MUST BE defined over all values of alpha, ie from -pi to pi
+%   * polar: a struct containing two fields:
+%     - polar.CL: an interpolant (gridded or scattered) CL(alpha, radius)
+%     - polar.CD: an interpolant (gridded or scattered) CD(alpha, radius)
 %   * tsr: the tip-speed ratio at which the analysis is carried out
 %   * B: the number of blades
 %
@@ -21,77 +21,46 @@ function [outr, outp] = fbem(blade, polar, tsr, B)
 %   * outp: a struct containing performance characteristics
 %     these are: thrust (ct), torque (cq), power (cp), root-bending moment (cy)
 
-% define short-hands
+eps = 1e-5;
+
+% short-hands
 r = blade(:, 1);
 c = blade(:, 2);
 beta = blade(:, 3);
 
-% assuming: r is sorted from root to tip
 rhub = r(1);
 rtip = r(end);
 ctip = c(end);
 
-% solution of the BEM problem
-eps = 1e-5;
+% geometrical functions
+solid = griddedInterpolant(r, B*c ./ (2*pi*r));
+beta = griddedInterpolant(r, beta);
+
+% preallocation
 a = nan(size(r));
 ap = nan(size(r));
 phi = nan(size(r));
-cl = nan(size(r));
-cd = nan(size(r));
 for isec = 1:length(r)
-	solid = B * c(isec) / (2*pi*r(isec));
-	lsr = tsr * r(isec) / rtip;
-
-	% tip-loss
-	Ftip = @(phi) max(2/pi * acos(exp(-B/2 * (tsr/lsr - 1) ./ sin(phi))), eps);
-	Froot = @(phi) max(2/pi * acos(exp(-B/2 * (1 - rhub/r(isec)) ./ sin(phi))), eps);
-	F = @(phi) Ftip(phi).* Froot(phi);
-
-	clf = @(alpha) interp1(polar(:, 1, isec), polar(:, 2, isec), alpha);
-	cdf = @(alpha) interp1(polar(:, 1, isec), polar(:, 3, isec), alpha);
-	cnf = @(phi) clf(phi-beta(isec)) * cos(phi) + cdf(phi-beta(isec)) * sin(phi);
-	ctf = @(phi) clf(phi-beta(isec)) * sin(phi) - cdf(phi-beta(isec)) * cos(phi);
-	
-	k = @(phi) solid * cnf(phi) ./ (4 * F(phi) * sin(phi).^2);
-	kp = @(phi) solid * ctf(phi) ./ (4 * F(phi) * sin(phi) * cos(phi));
-	
-	gamma1 = @(phi) 2 * F(phi) * k(phi) - (10/9 - F(phi));
-	gamma2 = @(phi) 2 * F(phi) * k(phi) - F(phi) * (4/3 - F(phi));
-	gamma3 = @(phi) 2 * F(phi) * k(phi) - (25/9 - 2 * F(phi));
-
-	af = @(phi) ...
-		k(phi)/(1 + k(phi)) * (k(phi) <= 2/3) + ...
-		(gamma1(phi) - sqrt(gamma2(phi))) / gamma3(phi) * (k(phi) > 2/3);
-	apf = @(phi) kp(phi)/(1 - kp(phi));
-
-	% objective function, regular
-	f = @(phi) ...
-		sin(phi)/(1 - af(phi)) - cos(phi)*(1 - kp(phi))/lsr;
-	
-	% objective function, propeller brake
-	fpb = @(phi) ...
-		sin(phi)/(1 - k(phi)) - cos(phi)*(1 - kp(phi))/lsr;
-
-	% solve 
-	if f(pi/2) > 0
-		phistar = fzero(f, [eps, pi/2]);
-	elseif fpb(-pi/4) > 0 && fpb(eps) > 0
-		phistar = fzero(fpb, [-pi/4, -eps]);
+	if f(pi/2, r(isec)) > 0
+		phistar = zero(eps, pi/2, eps, eps, @(x) f(x, r(isec)));
+	elseif fpb(-pi/4, r(isec)) > 0 && fpb(eps, r(isec)) > 0
+		phistar = zero(-pi/4, -eps, eps, eps, @(x) fpb(x, r(isec)));
 	else
-		phistar = fzero(f, [pi/2, pi]);
+		phistar = zero(pi/2, pi, eps, eps, @(x) f(x, r(isec)));
 	end
-	
-	phi(isec) = phistar;
-	a(isec) = af(phistar);
-	ap(isec) = apf(phistar);
-	cl(isec) = clf(phistar-beta(isec));
-	cd(isec) = cdf(phistar-beta(isec));
-end
 
+	phi(isec) = phistar;
+	a(isec) = af(phistar, r(isec));
+	ap(isec) = apf(phistar, r(isec));
+end
 lsr = tsr * r/rtip;
 
 % reduced quantities
-alpha = phi - beta;
+alpha = phi - beta(r);
+
+% blade section coefficients
+cl = polar.CL(alpha, r);
+cd = polar.CD(alpha, r);
 
 % forces in the turbine frame of reference
 cnorm = cl .* cos(phi) + cd .* sin(phi);
@@ -120,3 +89,60 @@ outr = struct('r', r, 'a', a, 'ap', ap, 'alpha', alpha, ...
 	'cl', cl, 'cd', cd);
 % performance
 outp = struct('ct', CT, 'cy', CY, 'cq', CQ, 'cp', CP);
+
+% nested functions
+	function y = F(phi, r)
+		Ftip = max(2/pi * acos(exp(-B/2 * (rtip/r - 1) ./ sin(phi))), eps);
+		Froot = max(2/pi * acos(exp(-B/2 * (1 - rhub/r) ./ sin(phi))), eps);
+		y = Ftip * Froot;
+	end
+
+	function y = cnf(phi, r)
+		y = polar.CL(phi-beta(r), r) .* cos(phi) + polar.CD(phi-beta(r), r) .* sin(phi);
+	end
+
+	function y = ctf(phi, r)
+		y = polar.CL(phi-beta(r), r) .* sin(phi) - polar.CD(phi-beta(r), r) .* cos(phi);
+	end
+
+	function y = k(phi, r)
+		y = solid(r) .* cnf(phi, r) ./ (4 * F(phi, r) .* sin(phi).^2);
+	end
+
+	function y = kp(phi, r)
+		y = solid(r) .* ctf(phi, r) ./ (2 * F(phi, r) .* sin(2*phi));
+	end
+
+	function y = gamma1(phi, r)
+		y = 2 * F(phi, r) .* k(phi, r) - (10/9 - F(phi, r));
+	end
+
+	function y = gamma2(phi, r)
+		y = 2 * F(phi, r) .* k(phi, r) - F(phi, r) .* (4/3 - F(phi, r));
+	end
+
+	function y = gamma3(phi, r)
+		y = 2 * F(phi, r) .* k(phi, r) - (25/9 - 2 * F(phi, r));
+	end
+
+	function y = af(phi, r)
+		if k(phi, r) <= 2/3
+			y = k(phi, r)./(1 + k(phi, r));
+		else
+			y = (gamma1(phi, r) - sqrt(gamma2(phi, r))) ./ gamma3(phi, r);
+		end
+	end
+
+	function y = apf(phi, r)
+		y = kp(phi, r)./(1 - kp(phi, r));
+	end
+
+	function y = f(phi, r)
+		y = sin(phi)./(1 - af(phi, r)) - cos(phi).*(1 - kp(phi, r))./(tsr * r/rtip);
+	end
+
+	function y = fpb(phi, r)
+		y = sin(phi)./(1 - k(phi, r)) - cos(phi).*(1 - kp(phi, r))./(tsr * r/rtip);
+	end
+
+end
