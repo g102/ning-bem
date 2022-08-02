@@ -15,6 +15,9 @@ An implementation of Glauert's tip-loss factor is provided.
  * `outp`: a struct containing performance characteristics: these are: thrust (ct), torque (cq), power (cp), root-bending moment (cy)
 
 ## Changelog:
+v1.02 (2022/08/02):
+ * Changed anonymous functions to nested functions (approx 2x faster)
+
 v1.01 (2022/07/29):
  * implemented root-loss correction via Prandtl
  * added a function to perform Viterna extrapolation on a minimal foil polar
