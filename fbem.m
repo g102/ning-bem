@@ -11,6 +11,8 @@ function [outr, outp] = fbem(blade, polar, tsr, B)
 %   * polar: a struct containing two fields:
 %     - polar.CL: an interpolant (gridded or scattered) CL(alpha, radius)
 %     - polar.CD: an interpolant (gridded or scattered) CD(alpha, radius)
+%     If polar.CL and .CD are functions of only one variable, this is assumed to
+%     be the angle of attack (so, for constant airfoil, polar.CL(alpha))
 %   * tsr: the tip-speed ratio at which the analysis is carried out
 %   * B: the number of blades
 %
@@ -59,8 +61,13 @@ lsr = tsr * r/rtip;
 alpha = phi - beta(r);
 
 % blade section coefficients
-cl = polar.CL(alpha, r);
-cd = polar.CD(alpha, r);
+if length(polar.CL.GridVectors) == 2
+	cl = polar.CL(alpha, r);
+	cd = polar.CD(alpha, r);
+else
+	cl = polar.CL(alpha);
+	cd = polar.CD(alpha);
+end
 
 % forces in the turbine frame of reference
 cnorm = cl .* cos(phi) + cd .* sin(phi);
@@ -98,11 +105,19 @@ outp = struct('ct', CT, 'cy', CY, 'cq', CQ, 'cp', CP);
 	end
 
 	function y = cnf(phi, r)
-		y = polar.CL(phi-beta(r), r) .* cos(phi) + polar.CD(phi-beta(r), r) .* sin(phi);
+		if length(polar.CL.GridVectors) == 2
+			y = polar.CL(phi-beta(r), r) .* cos(phi) + polar.CD(phi-beta(r), r) .* sin(phi);
+		else
+			y = polar.CL(phi-beta(r)) .* cos(phi) + polar.CD(phi-beta(r)) .* sin(phi);
+		end
 	end
 
 	function y = ctf(phi, r)
-		y = polar.CL(phi-beta(r), r) .* sin(phi) - polar.CD(phi-beta(r), r) .* cos(phi);
+		if length(polar.CL.GridVectors) == 2
+			y = polar.CL(phi-beta(r), r) .* sin(phi) - polar.CD(phi-beta(r), r) .* cos(phi);
+		else
+			y = polar.CL(phi-beta(r)) .* sin(phi) - polar.CD(phi-beta(r)) .* cos(phi);
+		end
 	end
 
 	function y = k(phi, r)
