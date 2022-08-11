@@ -15,6 +15,10 @@ An implementation of Prandtl's tip- and hub-loss factor is provided.
  * `outp`: a struct containing performance characteristics: these are: thrust (ct), torque (cq), power (cp), root-bending moment (cy)
 
 ## Changelog:
+v1.02 (2022/08/11):
+ * Removed viterna.m (was bugged)
+ * Changed the definition of loss factor F and functions k and k_p to account for total loss (F = 0) at the blade tip and root
+
 v1.02 (2022/08/02):
  * Changed anonymous functions to nested functions (approx 2x faster)
 
