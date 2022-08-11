@@ -2,7 +2,7 @@
 An implementation of Ning's BEM method in Matlab.
 
 This function computes the solution of the BEM problem for the blade given in input, following the approach of Ning (2014) (`doi: 10.1002/we.1636`).
-An implementation of Glauert's tip-loss factor is provided.
+An implementation of Prandtl's tip- and hub-loss factor is provided.
 
 ## Input
  * `blade`: a Nsec × 3 matrix: [radius(:), chord(:), twist(:)]. Radius and chord are in the same units, twist is in RADIANS
@@ -11,7 +11,7 @@ An implementation of Glauert's tip-loss factor is provided.
  * `B`: the number of blades
  
 ## Output
- * `outr`: a struct containing quantities varying along the blade span: these are: radius (r), induction factors (a, ap), local aoa (alpha), forces (cfnorm, cftang, cl, cd)
+ * `outr`: a struct containing quantities varying along the blade span: these are: radius (r), induction factors (a, ap), local aoa (alpha) and inflow angle (phi), forces (cfnorm, cftang, cl, cd) and loss factor along the blade (F)
  * `outp`: a struct containing performance characteristics: these are: thrust (ct), torque (cq), power (cp), root-bending moment (cy)
 
 ## Changelog:
