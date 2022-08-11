@@ -23,7 +23,7 @@ function [outr, outp] = fbem(blade, polar, tsr, B)
 %   * outp: a struct containing performance characteristics
 %     these are: thrust (ct), torque (cq), power (cp), root-bending moment (cy)
 
-eps = 1e-5;
+eps = 1e-6;
 
 % short-hands
 r = blade(:, 1);
@@ -42,18 +42,20 @@ beta = griddedInterpolant(r, beta);
 a = nan(size(r));
 ap = nan(size(r));
 phi = nan(size(r));
+loss = nan(size(r));
 for isec = 1:length(r)
 	if f(pi/2, r(isec)) > 0
-		phistar = zero(eps, pi/2, eps, eps, @(x) f(x, r(isec)));
+		phistar = fzero(@(x) f(x, r(isec)), [eps, pi/2]);
 	elseif fpb(-pi/4, r(isec)) > 0 && fpb(eps, r(isec)) > 0
-		phistar = zero(-pi/4, -eps, eps, eps, @(x) fpb(x, r(isec)));
+		phistar = fzero(@(x) f(x, r(isec)), [-pi/4, eps]);
 	else
-		phistar = zero(pi/2, pi, eps, eps, @(x) f(x, r(isec)));
+		phistar = fzero(@(x) f(x, r(isec)), [pi/2, pi]);
 	end
 
 	phi(isec) = phistar;
 	a(isec) = af(phistar, r(isec));
 	ap(isec) = apf(phistar, r(isec));
+	loss(isec) = F(phistar, r(isec));
 end
 lsr = tsr * r/rtip;
 
@@ -91,41 +93,51 @@ CP = tsr*CQ;
 
 % package for output
 % radial distributions
-outr = struct('r', r, 'a', a, 'ap', ap, 'alpha', alpha, ...
-	'cfnorm', cfnorm, 'cftang', cftang, 'cfx', cfx, 'cfy', cfy, ...
-	'cl', cl, 'cd', cd);
+outr = struct('r', r, 'phi', phi, 'a', a, 'ap', ap, 'alpha', alpha, ...
+	'cfnorm', cnorm, 'cftang', ctang, 'cfx', cfx, 'cfy', cfy, ...
+	'cl', cl, 'cd', cd, 'loss', loss);
 % performance
 outp = struct('ct', CT, 'cy', CY, 'cq', CQ, 'cp', CP);
 
 % nested functions
 	function y = F(phi, r)
-		Ftip = max(2/pi * acos(exp(-B/2 * (rtip/r - 1) ./ sin(phi))), eps);
-		Froot = max(2/pi * acos(exp(-B/2 * (1 - rhub/r) ./ sin(phi))), eps);
-		y = Ftip * Froot;
+		ftip = B/2 .* (rtip - r) ./ (r .* sin(phi));
+		Ftip = 2/pi * acos(exp(-ftip));
+		fhub = B/2 .* (r - rhub) ./ (r .* sin(phi));
+		Fhub = 2/pi * acos(exp(-fhub));
+		y = Ftip * Fhub;
 	end
 
 	function y = cnf(phi, r)
+		aloc = phi - beta(r);
 		if length(polar.CL.GridVectors) == 2
-			y = polar.CL(phi-beta(r), r) .* cos(phi) + polar.CD(phi-beta(r), r) .* sin(phi);
+			y = polar.CL(aloc, r) .* cos(phi) + polar.CD(aloc, r) .* sin(phi);
 		else
-			y = polar.CL(phi-beta(r)) .* cos(phi) + polar.CD(phi-beta(r)) .* sin(phi);
+			y = polar.CL(aloc) .* cos(phi) + polar.CD(aloc) .* sin(phi);
 		end
 	end
 
 	function y = ctf(phi, r)
+		aloc = phi - beta(r);
 		if length(polar.CL.GridVectors) == 2
-			y = polar.CL(phi-beta(r), r) .* sin(phi) - polar.CD(phi-beta(r), r) .* cos(phi);
+			y = polar.CL(aloc, r) .* sin(phi) - polar.CD(aloc, r) .* cos(phi);
 		else
-			y = polar.CL(phi-beta(r)) .* sin(phi) - polar.CD(phi-beta(r)) .* cos(phi);
+			y = polar.CL(aloc) .* sin(phi) - polar.CD(aloc) .* cos(phi);
 		end
 	end
 
 	function y = k(phi, r)
-		y = solid(r) .* cnf(phi, r) ./ (4 * F(phi, r) .* sin(phi).^2);
+		y = solid(r) .* cnf(phi, r) ./ (4 * F(phi, r) .* (sin(phi)).^2);
+		if isinf(y)
+			y = 1e30;
+		end
 	end
 
 	function y = kp(phi, r)
-		y = solid(r) .* ctf(phi, r) ./ (2 * F(phi, r) .* sin(2*phi));
+ 		y = solid(r) .* ctf(phi, r) ./ (4 * F(phi, r) .* sin(phi) .* cos(phi));
+		if isinf(y)
+			y = -1e30;
+		end
 	end
 
 	function y = gamma1(phi, r)
@@ -141,7 +153,7 @@ outp = struct('ct', CT, 'cy', CY, 'cq', CQ, 'cp', CP);
 	end
 
 	function y = af(phi, r)
-		if k(phi, r) <= 2/3
+		if k(phi, r) < 2/3
 			y = k(phi, r)./(1 + k(phi, r));
 		else
 			y = (gamma1(phi, r) - sqrt(gamma2(phi, r))) ./ gamma3(phi, r);
