@@ -129,14 +129,14 @@ outp = struct('ct', CT, 'cy', CY, 'cq', CQ, 'cp', CP);
 	function y = k(phi, r)
 		y = solid(r) .* cnf(phi, r) ./ (4 * F(phi, r) .* (sin(phi)).^2);
 		if isinf(y)
-			y = 1e30;
+			y = realmax;
 		end
 	end
 
 	function y = kp(phi, r)
  		y = solid(r) .* ctf(phi, r) ./ (4 * F(phi, r) .* sin(phi) .* cos(phi));
 		if isinf(y)
-			y = -1e30;
+			y = -realmax;
 		end
 	end
 
